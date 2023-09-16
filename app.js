@@ -82,14 +82,21 @@ document.addEventListener('mousemove', (e) => {
 );
 
 function updateCubePosition(){
-    const vector = intersectObjects[0].face.normal;
-    if (!axleLock){
+
+    if (!axleLock){let position = new THREE.Vector3();
+        let quaternion = new THREE.Quaternion();
+        let scale = new THREE.Vector3();
+        intersectObjects[0].object.matrixWorld.decompose(position, quaternion, scale);
+        intersectObjects[0].face.normal.applyQuaternion(quaternion).normalize();
+    
+        const vector = intersectObjects[0].face.normal;
+        
         if (Math.abs(xAxle.dot(vector)) < 1e-6){
             if (Math.abs(yAxle.dot(vector)) < 1e-6){
                 if (Math.abs(vectorRelationship(xAxle, delta)) < 0.5){
-                    axle = 1;
-                }else{
                     axle = 0;
+                }else{
+                    axle = 1;
                 }
             }else{
                 if (Math.abs(vectorRelationship(xAxle, delta)) < 0.5){
@@ -107,7 +114,11 @@ function updateCubePosition(){
         }
         
         selectedObject = intersectObjects[0].object;
+        selectedX = Math.round(selectedObject.position.x) + 1;
+        selectedY = Math.round(selectedObject.position.y) + 1;
+        selectedZ = Math.round(selectedObject.position.z) + 1;
         
+        /*
         for(let x = 0; x < cubes.length; x++){
             for(let y = 0; y < cubes[x].length; y++){
                 for(let z = 0; z < cubes[x][y].length; z++){
@@ -120,19 +131,23 @@ function updateCubePosition(){
                 }
             }
         }
+        */
         axleLock = true;
     }
+    unCubes =deepCopyArray(cubes);
+
     delta.multiplyScalar(0.005);
     if(axle == 0){
         for(let y = 0;y < 3;y++){
             for(let z = 0; z < 3; z++){
-                cubes[selectedX][y][z].rotate(delta.x,0,0)
+                cubes[selectedX][y][z].rotate(delta.y,0,0)
             }
         }
     }else if(axle == 1){
         for(let x = 0; x < 3; x++){
             for(let z = 0; z < 3; z++){
-                cubes[x][selectedY][z].rotate(0,delta.x,0);
+                cubes[x][selectedY][z].rotate(0,delta.x,0); 
+
             }
         }
     }else{
@@ -142,6 +157,25 @@ function updateCubePosition(){
             }
         }
     }
+    
+    for (let i = 0; i < 3; i++){
+        for (let j = 0; j < 3; j++){
+            for (let k = 0; k < 3; k++){
+                if(unCubes[i][j][k] == null){
+                    unCubes[i][j][k] = cubes[i][j][k];
+                }
+            }
+        }
+    }
+    cubes =deepCopyArray(unCubes);
+
+    function deepCopyArray(arr) {
+        if (Array.isArray(arr)) {
+          return arr.map(deepCopyArray);
+        } else {
+          return arr;
+        }
+      }
     
     function vectorRelationship(A, B) {
         const dotProduct = A.dot(B);
@@ -164,8 +198,8 @@ document.addEventListener('mouseup',() =>{
     axleLock = false;
 });
 
-class Cube extends THREE.Mesh{
-    constructor(size,color0, color1, color2, color3, color4, color5, x, y, z){
+class Cube extends THREE.Mesh {
+    constructor(size, color0, color1, color2, color3, color4, color5, x, y, z) {
         const geometry = new THREE.BoxGeometry(size, size, size);
         const materials = [
             new THREE.MeshBasicMaterial({ color: new THREE.Color(color0) }),
@@ -174,35 +208,69 @@ class Cube extends THREE.Mesh{
             new THREE.MeshBasicMaterial({ color: new THREE.Color(color3) }),
             new THREE.MeshBasicMaterial({ color: new THREE.Color(color4) }),
             new THREE.MeshBasicMaterial({ color: new THREE.Color(color5) }),
-          ];
+        ];
         super(geometry, materials);
-        this.position.x = x;
-        this.position.y = y;
-        this.position.z = z;
-        this.rx0 = Math.sqrt(y*y + z*z);
-        this.ry0 = Math.sqrt(x*x + z*z);
-        this.rz0 = Math.sqrt(x*x + y*y);
-        this.rx1 = Math.atan(y,z);
-        this.ry1 = Math.atan(x,z);
-        this.rz1 = Math.atan(y,z);
+        this.position.set(x, y, z);
+        this.rx = 0;
+        this.ry = 0;
+        this.rz = 0;
     }
 
-    rotate(rx,ry,rz){
-        this.rotation.x += rx;
-        this.rotation.y -= ry;
-        this.rotation.z += rz;
+    rotate(rx, ry, rz) {
+        const cosRx = Math.cos(rx);
+        const sinRx = Math.sin(rx);
+        const cosRy = Math.cos(ry);
+        const sinRy = Math.sin(ry);
+        const cosRz = Math.cos(rz);
+        const sinRz = Math.sin(rz);
+
+        const x = this.position.x;
+        const y = this.position.y;
+        const z = this.position.z;
+
+        // Apply rotation transformation for each axis
+        const newX = cosRy * cosRz * x + (sinRx * sinRy * cosRz - cosRx * sinRz) * y + (cosRx * sinRy * cosRz + sinRx * sinRz) * z;
+        const newY = cosRy * sinRz * x + (sinRx * sinRy * sinRz + cosRx * cosRz) * y + (cosRx * sinRy * sinRz - sinRx * cosRz) * z;
+        const newZ = -sinRy * x + sinRx * cosRy * y + cosRx * cosRy * z;
+
+        this.position.set(newX, newY, newZ);
+        this.rotateOnWorldAxis(new THREE.Vector3(1, 0, 0), rx);
+        this.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), ry);
+        this.rotateOnWorldAxis(new THREE.Vector3(0, 0, 1), rz);
+
+        
         this.rx += rx;
         this.ry += ry;
         this.rz += rz;
-        this.position.y = Math.cos(rx) * this.position.y - Math.sin(rx) * this.position.z;
-        this.position.z = Math.sin(rx) * this.position.y + Math.cos(rx) * this.position.z;
-        this.position.x = Math.cos(ry) * this.position.x - Math.sin(ry) * this.position.z;
-        this.position.z = Math.sin(ry) * this.position.x + Math.cos(ry) * this.position.z;
-        this.position.x = Math.cos(rz) * this.position.x - Math.sin(rz) * this.position.y;
-        this.position.y = Math.sin(rz) * this.position.x + Math.cos(rz) * this.position.y;
 
+        if(this.rx > Math.PI/2 || this.rx < -Math.PI/2 ){
+            this.rx = this.rx % (Math.PI/2);
+            
+            unCubes[Math.round(this.position.x)+1][Math.round(this.position.y)+1][Math.round(this.position.z)+1] = this;
+        }else if(this.ry > Math.PI/2 || this.ry < -Math.PI/2){
+            
+            this.ry = this.ry % (Math.PI/2);
+
+
+            unCubes[Math.round(this.position.x)+1][Math.round(this.position.y)+1][Math.round(this.position.z)+1] = this;
+
+        }else if(this.rz > Math.PI/2 || this.rz < -Math.PI/2){
+            this.rz = this.rz % (Math.PI/2);
+            unCubes[Math.round(this.position.x)+1][Math.round(this.position.y)+1][Math.round(this.position.z)+1] = this;
+
+        }
+    }
+    autoRotate(){
+        if(this.rx != 0){
+            this.rotate(-this.rx,0,0);
+        }else if (this.ry != 0){
+            this.rotate(0,-this.ry,0);
+        }else if (this.rz != 0){
+            this.rotate(0,0,-this.rz);
+        }
     }
 }
+
 
 
 
@@ -216,13 +284,19 @@ const orange = "hsl(30, 100%, 50%)";
 const gray = "#A9A9A9";
 
 
-const cubes = [];
+let cubes = [];
+let unCubes = [];
 const flatCubes =[];
 
 for(let i = 0; i < 3; i++) {
     cubes[i] = [];
+    unCubes[i] = [];
     for(let j = 0; j < 3; j++) {
         cubes[i][j] = [];
+        unCubes[i][j] = [];
+        for(let k = 0; k<3; k++){
+            unCubes[i][j][k] = null;
+        }
     }
 }
 
@@ -291,15 +365,17 @@ function init(){
     }
 }
 function animate(){
-    cubes[0][0][0].rotate(0.1,0,0);
-    cubes[0][0][1].rotate(0.1,0,0);
-    cubes[0][0][2].rotate(0.1,0,0);
-    cubes[0][1][0].rotate(0.1,0,0);
-    cubes[0][1][1].rotate(0.1,0,0);
-    cubes[0][1][2].rotate(0.1,0,0);
-    cubes[0][2][0].rotate(0.1,0,0);
-    cubes[0][2][1].rotate(0.1,0,0);
-    cubes[0][2][2].rotate(0.1,0,0);
+    if(!isDragging){
+        for(const x of cubes){
+            for(const y of x){
+                for(const z of y){
+                    z.autoRotate();
+                }
+            }
+        }
+
+    }
+    
     requestAnimationFrame(animate);
     renderer.render(scene,camera);
 }
